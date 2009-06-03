@@ -4,6 +4,7 @@ ENV['RAILS_ENV'] = 'test'
 ENV['RAILS_ROOT'] ||= File.dirname(__FILE__) + '/../../../..'
 
 require 'test/unit'
+Thread.current[:rconditions_processing_predicate_method] = true # Turn off the RConditions beast!!!
 require File.expand_path(File.join(ENV['RAILS_ROOT'], 'config/environment.rb'))
 require 'active_record/fixtures'
 require 'action_controller/test_process'
@@ -31,20 +32,26 @@ if db_adapter.nil?
   raise "No DB Adapter selected.  Pass the DB= option to pick one, or install Sqlite or Sqlite3."
 end
 
-ActiveRecord::Base.establish_connection(config[db_adapter])
-
 load(File.dirname(__FILE__) + "/schema.rb")
 
-Test::Unit::TestCase.fixture_path = File.dirname(__FILE__) + "/fixtures"
-$LOAD_PATH.unshift(Test::Unit::TestCase.fixture_path)
+fixture_path_klazz = Test::Unit::TestCase
+if defined?(ActiveRecord::TestFixtures) 
+  fixture_path_klazz = ActiveSupport::TestCase
+  class ActiveSupport::TestCase
+    include ActiveRecord::TestFixtures
+  end
+end
 
-class Test::Unit::TestCase #:nodoc:
+fixture_path_klazz.fixture_path = File.dirname(__FILE__) + "/fixtures"
+$LOAD_PATH.unshift(fixture_path_klazz.fixture_path)
+
+class ActiveSupport::TestCase #:nodoc:
   include ActionController::TestProcess
   def create_fixtures(*table_names)
     if block_given?
-      Fixtures.create_fixtures(Test::Unit::TestCase.fixture_path, table_names) { yield }
+      Fixtures.create_fixtures(ActiveSupport::TestCase.fixture_path, table_names) { yield }
     else
-      Fixtures.create_fixtures(Test::Unit::TestCase.fixture_path, table_names)
+      Fixtures.create_fixtures(ActiveSupport::TestCase.fixture_path, table_names)
     end
   end
 
