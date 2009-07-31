@@ -96,7 +96,7 @@ class CloudfilesTest < ActiveSupport::TestCase
       end
   else
     def test_flunk_s3
-      puts "s3 config file not loaded, tests not running"
+      puts "rackspace config file not loaded, tests not running"
     end
   end
 end
