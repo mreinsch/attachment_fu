@@ -1,0 +1,110 @@
+= attachment_fu and video encoding
+
+This branch contains a processor for video encoding via encoding.com.
+
+== Requirements
+
+* gem: rubyist-aasm (tested with: 2.0.5)
+* plugin: app_config (http://github.com/cjbottaro/app_config)
+* account on encoding.com / amazon s3
+
+== Setup
+
+Add the following section to your app_config.yml:
+
+    encoding_com:
+      user_id: <your encoding.com user_id>
+      user_key: <your encoding.com user_key>
+
+== Changes to the Model (Example)
+
+To enable video encoding, use for example:
+
+    class Video
+      has_attachment :storage => :s3,
+                     :content_type => Technoweenie::AttachmentFu::Processors::VideoEncodingProcessor::VIDEOS,
+                     :max_size => 100.megabytes,
+                     :thumbnails => { :thumb => [120, 120], :splash => [400, 300] },
+                     :thumbnail_class => Thumbnail,
+                     :videos => {:mp4 => {}},
+                     :processor => "VideoEncoding",
+                     :encoding_callback_url => "http://my.service.com/encoding_callback"
+
+      validates_as_attachment
+    end
+
+    class Thumbnail
+      has_attachment :storage => :s3,
+                     :content_type => :image
+      validates_as_attachment
+    end
+
+You need the second Thumbnail class for any thumbnails you want to produce (see
+:thumbnail_class in Video).
+
+The :videos section determines the different kind of videos to produce. Please
+refere to http://www.encoding.com/wdocs/ApiDoc for available codecs and options.
+The key of the videos hash is used in similar ways as for :thumbnails (see 
+below), but also determines the video_codec parameter passed on to 
+encoding.com. The value is used for additional parameters.
+
+The :encoding_callback_url is used to specify the callback URL for encoding.com.
+See below for an example callback controller.
+
+== Database Migration
+
+When using the video encoder, you need two more field in the database in order
+to handle the status and encoder callbacks.
+
+For example, considering you already have a table for un-encoded videos, you
+would need the following migration:
+
+    add_column :videos, :encoding_status,      :string
+    add_column :videos, :external_encoding_id, :string
+    add_index  :videos, :external_encoding_id
+
+== Usage in Views
+
+You can link to an encoded video using:
+
+    link_to "Video (MP4)", @video.public_filename(:mp4)
+
+Embedding it into a player works just the same way.
+
+To access the thumbnails, use:
+
+    @video.public_filename(:thumb)
+
+== Callback
+
+Because encoding the video into different formats takes a while, encoding.com
+provides a callback mechanism. To use this mechanism, specify the 
+:encoding_callback_url and put a controller like this in place:
+
+    class EncoderCallbackController < ApplicationController
+      protect_from_forgery :except => [:callback]
+
+      def callback
+        if params[:xml]
+          Video.process_encoder_callback(params[:xml])
+          render :text => 'Thanks!'
+        else
+          render :text => 'No!', :status => :bad_request
+        end
+      end
+    end
+
+Then you can use the state in the view to check whether or not a video was 
+already encoded:
+
+    <% if @video.encoding_done? %>
+      <%= link_to "Video (MP4)", @video.public_filename(:mp4) %>
+    <% else %>
+       Video not yet available, try again later.
+    <% end %>
+
+
+== Limitations
+
+* The video processor *only* works with S3. Don't ever use another storage backend.
+
