@@ -65,7 +65,7 @@ class ActiveSupport::TestCase #:nodoc:
     FileUtils.rm_rf File.join(File.dirname(__FILE__), 'files')
   end
 
-  self.use_transactional_fixtures = true
+  self.use_transactional_fixtures = false
   self.use_instantiated_fixtures  = false
 
   def self.attachment_model(klass = nil)
@@ -86,6 +86,10 @@ class ActiveSupport::TestCase #:nodoc:
   end
 
   protected
+    def assert_valid(record)
+      assert record.valid?, record.errors.full_messages.join("\n")
+    end
+
     def upload_file(options = {})
       use_temp_file options[:filename] do |file|
         att = attachment_model.create :uploaded_data => fixture_file_upload(file, options[:content_type] || 'image/png')
